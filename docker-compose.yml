@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: tradevault-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: tradevault
+      POSTGRES_PASSWORD: tradevault_secure_pass_123
+      POSTGRES_DB: tradevault_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    expose:
+      - "5432"
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tradevault-web
+    restart: always
+    ports:
+      - "3001:3000"
+    environment:
+      DATABASE_URL: "postgresql://tradevault:tradevault_secure_pass_123@postgres:5432/tradevault_db?schema=public"
+      NODE_ENV: production
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:
