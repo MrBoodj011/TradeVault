@@ -1,36 +1,26 @@
-# Stage 1: Install dependencies
-FROM node:20-slim AS deps
-RUN apt-get update && apt-get install -y openssl
+FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm install
+RUN npm ci --ignore-scripts --no-audit --no-fund
 
-# Stage 2: Build the app
-FROM node:20-slim AS builder
-RUN apt-get update && apt-get install -y openssl
+FROM node:22-alpine AS builder
 WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# Disable Next telemetry
-ENV NEXT_TELEMETRY_DISABLED=1
-# Generate prisma client
-RUN npx prisma generate
-# Build Next.js application
 RUN npm run build
 
-# Stage 3: Production runner
-FROM node:20-slim AS runner
-RUN apt-get update && apt-get install -y openssl
+FROM node:22-alpine AS runner
 WORKDIR /app
-ENV NODE_ENV=production
-ENV PORT=3000
-ENV HOSTNAME="0.0.0.0"
-
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next ./.next
-
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    PORT=3000 \
+    HOSTNAME=0.0.0.0
+RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+USER nextjs
 EXPOSE 3000
-CMD ["sh", "-c", "npx prisma db push && npm run start"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD wget -qO- http://127.0.0.1:3000/ >/dev/null || exit 1
+CMD ["node", "server.js"]

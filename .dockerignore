@@ -3,5 +3,9 @@ node_modules
 out
 .git
 .github
+coverage
+playwright-report
+test-results
 *.log
-.env.local
+.env*
+docs
